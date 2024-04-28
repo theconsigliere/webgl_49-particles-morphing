@@ -98,6 +98,7 @@ const particles = {}
 
 // MODELS
 gltfLoader.load("./models.glb", (gltf) => {
+  particles.index = 0
   // Positions
   const positions = gltf.scene.children.map(
     (child) => child.geometry.attributes.position
@@ -110,6 +111,7 @@ gltfLoader.load("./models.glb", (gltf) => {
   }
   // CREATE NEW FLOAT32ARRAY WITH THE RIGHT SIZE
   particles.positions = []
+
   for (const position of positions) {
     // Retrieve the original array of vertices out of the position and save it as originalArray:
     const originalArray = position.array
@@ -123,18 +125,42 @@ gltfLoader.load("./models.glb", (gltf) => {
         newArray[i3 + 1] = originalArray[i3 + 1]
         newArray[i3 + 2] = originalArray[i3 + 2]
       } else {
-        newArray[i3] = 0
-        newArray[i3 + 1] = 0
-        newArray[i3 + 2] = 0
+        // set newly created values in random locations
+        const randomIndex = Math.floor(position.count * Math.random()) * 3
+        newArray[i3 + 0] = originalArray[randomIndex + 0]
+        newArray[i3 + 1] = originalArray[randomIndex + 1]
+        newArray[i3 + 2] = originalArray[randomIndex + 2]
       }
     }
+
+    // Push the new array to the particles.positions array
+    particles.positions.push(new THREE.Float32BufferAttribute(newArray, 3))
   }
 
+  // RANDOM SIZES
+  const sizesArray = new Float32Array(particles.maxCount)
+
+  for (let i = 0; i < particles.maxCount; i++) sizesArray[i] = Math.random()
+
   // Geometry
-  particles.geometry = new THREE.SphereGeometry(3)
-  particles.geometry.setIndex(null)
+  particles.geometry = new THREE.BufferGeometry()
+  particles.geometry.setAttribute(
+    "position",
+    particles.positions[particles.index]
+  )
+  // TARGET POSITION
+  particles.geometry.setAttribute("aPositionTarget", particles.positions[2])
+  // RANDOM SIZE
+  particles.geometry.setAttribute(
+    "aSize",
+    new THREE.BufferAttribute(sizesArray, 1)
+  )
 
   // Material
+
+  particles.colorA = "#ff7300"
+  particles.colorB = "#0091ff"
+
   particles.material = new THREE.ShaderMaterial({
     vertexShader: particlesVertexShader,
     fragmentShader: particlesFragmentShader,
@@ -146,6 +172,9 @@ gltfLoader.load("./models.glb", (gltf) => {
           sizes.height * sizes.pixelRatio
         )
       ),
+      uProgress: new THREE.Uniform(0),
+      uColorA: new THREE.Uniform(new THREE.Color(particles.colorA)),
+      uColorB: new THREE.Uniform(new THREE.Color(particles.colorB)),
     },
     blending: THREE.AdditiveBlending,
     depthWrite: false,
@@ -153,7 +182,63 @@ gltfLoader.load("./models.glb", (gltf) => {
 
   // Points
   particles.points = new THREE.Points(particles.geometry, particles.material)
+  particles.points.frustumCulled = false
   scene.add(particles.points)
+
+  // BETWEEN THE MODELS
+  // Methods
+  particles.morph = (index) => {
+    // Update attributes
+    particles.geometry.attributes.position =
+      particles.positions[particles.index]
+    // UPDATE NEW TARGET POSITION
+    particles.geometry.attributes.aPositionTarget = particles.positions[index]
+
+    // Animate uProgress
+    gsap.fromTo(
+      particles.material.uniforms.uProgress,
+      { value: 0 },
+      { value: 1, duration: 3, ease: "linear" }
+    )
+
+    // Save index
+    particles.index = index
+  }
+
+  particles.morph0 = () => {
+    particles.morph(0)
+  }
+  particles.morph1 = () => {
+    particles.morph(1)
+  }
+  particles.morph2 = () => {
+    particles.morph(2)
+  }
+  particles.morph3 = () => {
+    particles.morph(3)
+  }
+
+  // Tweaks
+  gui
+    .add(particles.material.uniforms.uProgress, "value")
+    .min(0)
+    .max(1)
+    .step(0.001)
+    .name("uProgress")
+    .listen()
+
+  // Tweak
+  gui.addColor(particles, "colorA").onChange(() => {
+    particles.material.uniforms.uColorA.value.set(particles.colorA)
+  })
+  gui.addColor(particles, "colorB").onChange(() => {
+    particles.material.uniforms.uColorB.value.set(particles.colorB)
+  })
+
+  gui.add(particles, "morph0")
+  gui.add(particles, "morph1")
+  gui.add(particles, "morph2")
+  gui.add(particles, "morph3")
 })
 
 // MXK LOGO
